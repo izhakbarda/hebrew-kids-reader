@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import Library from './components/Library';
 import Reader from './components/Reader';
 import Login from './components/Login';
+import SubjectSelection from './components/SubjectSelection';
+import MathGame from './components/MathGame';
 import { books } from './data/books';
 import { getBookReads, incrementBookRead, getMandatoryBookId, setMandatoryBookId } from './lib/db';
 import { supabase } from './lib/supabase';
 
 function App() {
-    const [currentView, setCurrentView] = useState('library');
+    const [currentView, setCurrentView] = useState('selection');
     const [currentBook, setCurrentBook] = useState(null);
     const [user, setUser] = useState(null);
     const [readCounts, setReadCounts] = useState({});
@@ -98,12 +100,21 @@ function App() {
 
     const handleLogin = (userData) => {
         setUser(userData);
-        setCurrentView('library');
+        setCurrentView('selection');
     };
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setUser(null);
+        setCurrentView('selection');
+    };
+
+    const handleSelectSubject = (subject) => {
+        if (subject === 'language') {
+            setCurrentView('library');
+        } else if (subject === 'math') {
+            setCurrentView('math');
+        }
     };
 
     const handleFinishBook = async (bookId) => {
@@ -129,15 +140,27 @@ function App() {
         // If clicking the already mandatory book, toggle it off (set to null)
         const newId = mandatoryBookId === bookId ? null : bookId;
 
+        console.log('Setting mandatory book:', {
+            currentMandatoryBookId: mandatoryBookId,
+            clickedBookId: bookId,
+            newId: newId,
+            action: newId === null ? 'UNLOCKING' : 'LOCKING'
+        });
+
         // Optimistic update
         setMandatoryBookIdState(newId);
 
         // DB update
-        await setMandatoryBookId(newId);
+        const result = await setMandatoryBookId(newId);
+        console.log('Database update result:', result);
 
         // Reload to confirm
         const confirmedId = await getMandatoryBookId();
+        console.log('Confirmed mandatory book ID from DB:', confirmedId);
         setMandatoryBookIdState(confirmedId);
+
+        // Force reload all data to ensure UI is in sync
+        await loadData();
     };
 
     // If no user is logged in, show Login screen
@@ -151,6 +174,13 @@ function App() {
 
     return (
         <div className="min-h-screen font-sans" dir="rtl">
+            {currentView === 'selection' && (
+                <SubjectSelection
+                    onSelectSubject={handleSelectSubject}
+                    onLogout={handleLogout}
+                    user={user}
+                />
+            )}
             {currentView === 'library' && (
                 <Library
                     books={books}
@@ -160,7 +190,11 @@ function App() {
                     readCounts={readCounts}
                     mandatoryBookId={mandatoryBookId}
                     onSetMandatoryBook={handleSetMandatoryBook}
+                    onBack={() => setCurrentView('selection')}
                 />
+            )}
+            {currentView === 'math' && (
+                <MathGame onBack={() => setCurrentView('selection')} />
             )}
             {currentView === 'reader' && (
                 <Reader
